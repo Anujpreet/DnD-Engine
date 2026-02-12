@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DnD Engine</title>
+    <script src="https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/dice-box.umd.js"></script>
+    <style>
+        body {
+            margin: 0;
+            background: #121212;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #lobby-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .lobby-box {
+            background: #222;
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #444;
+            text-align: center;
+            width: 320px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .lobby-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 6px;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .lobby-btn {
+            width: 100%;
+            padding: 12px;
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: 0.2s;
+        }
+
+        .btn-host {
+            background: #5a2e91;
+            color: white;
+        }
+
+        .btn-join {
+            background: #2e915a;
+            color: white;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #game-area {
+            flex-grow: 1;
+            display: flex;
+            position: relative;
+            height: 100%;
+        }
+
+        #toolbar {
+            width: 60px;
+            background: #1e1e1e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 20px;
+            z-index: 50;
+        }
+
+        .tool {
+            width: 40px;
+            height: 40px;
+            background: #333;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+        }
+
+        #viewport {
+            flex-grow: 1;
+            background: #1a1a1a;
+            overflow: auto;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1;
+        }
+
+        #room-info {
+            position: absolute;
+            top: 15px;
+            right: 320px;
+            background: #5a2e91;
+            padding: 6px 18px;
+            border-radius: 20px;
+            font-weight: bold;
+            z-index: 100;
+            font-size: 13px;
+            display: none;
+        }
+
+        #chat-panel {
+            width: 300px;
+            background: #181818;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            z-index: 50;
+        }
+
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+            font-size: 14px;
+        }
+
+        #input-area {
+            display: flex;
+            padding: 15px;
+            background: #1e1e1e;
+            border-top: 1px solid #333;
+        }
+
+        #msg-input {
+            flex-grow: 1;
+            background: #333;
+            border: none;
+            padding: 12px;
+            color: white;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        #msg-input:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        #dice-menu {
+            position: absolute;
+            left: 70px;
+            top: 180px;
+            background: #222;
+            border: 1px solid #444;
+            border-radius: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 5px;
+            padding: 12px;
+            z-index: 100;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .dice-btn {
+            background: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        #dice-stage {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="lobby-overlay">
+        <div class="lobby-box" id="lobby-main">
+            <h2 style="margin:0 0 20px 0;">DnD Engine</h2>
+            <input type="text" id="username-input" class="lobby-input" placeholder="Enter Username">
+            <button class="lobby-btn btn-host" id="btn-host-game">Host New Game</button>
+            <button class="lobby-btn" id="btn-show-join" style="background:#444;">Join Game</button>
+        </div>
+        <div class="lobby-box hidden" id="lobby-join">
+            <h2 style="margin:0 0 20px 0;">Enter Room Code</h2>
+            <input type="text" id="room-code-input" class="lobby-input" placeholder="4-Letter Code" maxlength="4"
+                style="text-transform: uppercase;">
+            <button class="lobby-btn btn-join" id="btn-confirm-join">Enter World</button>
+            <button class="lobby-btn" id="btn-back" style="background:transparent; color:#888;">Back</button>
+        </div>
+    </div>
+
+    <div id="room-info">Room: <span id="room-code-display">????</span></div>
+
+    <div id="game-area">
+        <div id="toolbar">
+            <div class="tool" onclick="document.getElementById('map-upload').click()">🗺️</div>
+            <input type="file" id="map-upload" accept="image/*" style="display: none;">
+            <div class="tool" onclick="toggleDiceMenu()">🎲</div>
+        </div>
+        <div id="dice-menu">
+            <button class="dice-btn" onclick="rollDice(4)">D4</button>
+            <button class="dice-btn" onclick="rollDice(6)">D6</button>
+            <button class="dice-btn" onclick="rollDice(8)">D8</button>
+            <button class="dice-btn" onclick="rollDice(10)">D10</button>
+            <button class="dice-btn" onclick="rollDice(12)">D12</button>
+            <button class="dice-btn" onclick="rollDice(20)">D20</button>
+        </div>
+        <div id="dice-stage"></div>
+        <div id="viewport"><canvas id="game-canvas"></canvas></div>
+    </div>
+
+    <div id="chat-panel">
+        <div id="messages"></div>
+        <form id="input-area"><input id="msg-input" placeholder="Waiting for room..." disabled /></form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+</body>
+
+</html>
