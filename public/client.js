@@ -38,22 +38,31 @@ document.getElementById('btn-confirm-join').onclick = () => {
     } else { alert("Enter 4-letter code"); }
 };
 
-// 3. 3D DICE ENGINE
+// 3. 3D DICE ENGINE (VISIBILITY FIX)
 let Box;
 try {
-    Box = new DiceBox("#dice-stage", {
+    Box = new DiceBox({
+        container: "#dice-stage",
         id: "dice-canvas",
-        assetPath: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/assets/",
-        startingHeight: 8,
-        throwForce: 6,
-        spinForce: 5,
-        themeColor: "#5a2e91",
-        scale: 5
+        origin: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/",
+        assetPath: "assets/",
+
+        // VISIBILITY SETTINGS
+        scale: 9,           // Max safe size for physics
+        throwForce: 20,      // ✅ INCREASED: Throws them into the center of the screen
+        spinForce: 4,       // More spin looks better large
+        startingHeight: 15, // Drop from higher up
+        gravity: 1,
+
+        theme: "default",
+        themeColor: "#5a2e91"
     });
+
     Box.init().then(() => console.log("Dice Ready"));
 } catch (e) {
     console.error("Dice failed", e);
 }
+
 
 // 4. SOCKET LOGIC
 socket.on('room_joined', (data) => {
@@ -71,7 +80,11 @@ socket.on('trigger_roll', (data) => {
     if (menu) menu.style.display = 'none';
 
     if (Box) {
-        Box.roll(`${data.sides}d${data.sides}`).then((results) => {
+        // 👇 FIX: Use '1d' instead of data.sides + 'd'
+        // This ensures we only roll ONE die of the specified type
+        Box.roll(`1d${data.sides}`).then((results) => {
+
+            // Only the person who clicked sends the result to chat
             if (data.rollerId === socket.id) {
                 let total = results.reduce((acc, r) => acc + r.value, 0);
                 socket.emit('roll_complete', {
@@ -80,6 +93,8 @@ socket.on('trigger_roll', (data) => {
                     user: myUsername
                 });
             }
+
+            // Clear dice after 4 seconds
             setTimeout(() => Box.clear(), 4000);
         });
     }
