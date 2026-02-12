@@ -1,8 +1,7 @@
 import DiceBox from "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/dice-box.es.min.js";
-
 const socket = io();
 
-// 1. DOM ELEMENTS
+// 1. STATE & UI ELEMENTS
 const lobbyOverlay = document.getElementById('lobby-overlay');
 const lobbyMain = document.getElementById('lobby-main');
 const lobbyJoin = document.getElementById('lobby-join');
@@ -11,10 +10,65 @@ const msgInput = document.getElementById('msg-input');
 const diceMenu = document.getElementById('dice-menu');
 const messages = document.getElementById('messages');
 
-let myUsername = "Player";
-let myRoomCode = null;
+let myUsername = "Player", myRoomCode = null, myDiceColor = "#5a2e91";
 
-// 2. LOBBY LISTENERS
+// 2. DICE ENGINE
+let Box = new DiceBox({
+    container: "#dice-stage",
+    id: "dice-canvas",
+    origin: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/",
+    assetPath: "assets/",
+    scale: 12,
+    theme: "default",
+    themeColor: myDiceColor,
+    restitution: 0.5,
+    throwForce: 6
+});
+Box.init();
+
+// 3. DICE ACTIONS
+window.updateDiceColor = (color) => { myDiceColor = color; };
+window.rollDice = (s) => { socket.emit('roll_dice', { sides: s, username: myUsername, color: myDiceColor }); };
+
+socket.on('trigger_god_roll', (data) => {
+    if (Box) {
+        Box.clear(); // Clear any old dice
+
+        // ✅ IMPORTANT: We pass an array of objects with the 'value' property.
+        // This forces the physics engine to land on the server's result.
+        Box.roll([{
+            sides: data.sides,
+            value: data.result, // <--- This forces the outcome on ALL screens
+            themeColor: data.color
+        }]).then((results) => {
+            // SUM DISPLAYER: Calculate total from the results array
+            const total = results.reduce((acc, curr) => acc + curr.value, 0);
+
+            const item = document.createElement('div');
+            item.style.borderLeft = `4px solid ${data.color}`;
+            item.style.paddingLeft = "8px";
+            item.innerHTML = `<b style="color:${data.color}">${data.user}:</b> Rolled D${data.sides} [ <b>${total}</b> ]`;
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+
+            // Clear dice after 4 seconds to keep the board clean
+            setTimeout(() => Box.clear(), 4000);
+        });
+    }
+});
+
+// Update the roll request to include your username and color
+window.rollDice = (s) => {
+    socket.emit('roll_dice', {
+        sides: s,
+        username: myUsername,
+        color: myDiceColor
+    });
+};
+
+window.toggleDiceMenu = () => diceMenu.style.display = (diceMenu.style.display === 'flex') ? 'none' : 'flex';
+
+// 4. LOBBY LISTENERS
 document.getElementById('btn-host-game').onclick = () => {
     myUsername = document.getElementById('username-input').value || "Host";
     socket.emit('host_game', myUsername);
@@ -33,155 +87,51 @@ document.getElementById('btn-back').onclick = () => {
 document.getElementById('btn-confirm-join').onclick = () => {
     const code = document.getElementById('room-code-input').value.toUpperCase();
     myUsername = document.getElementById('username-input').value || "Guest";
-    if (code.length === 4) {
-        socket.emit('join_game', { username: myUsername, code: code });
-    } else { alert("Enter 4-letter code"); }
+    if (code.length === 4) socket.emit('join_game', { username: myUsername, code: code });
 };
 
-// 3. 3D DICE ENGINE (INFINITE FLOOR MODE)
-let Box;
-try {
-    Box = new DiceBox({
-        container: "#dice-stage",
-        id: "dice-canvas",
-        origin: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/",
-        assetPath: "assets/",
-
-        // VISUALS
-        scale: 4,           // Standard size
-        themeColor: "#5a2e91",
-        theme: "default",
-
-        // PHYSICS
-        mass: 5,            // Solid weight
-        friction: 0.9,      // 🛑 High Friction: Stops the die before it hits the edge
-        restitution: 0.2,   // ✅ Bouncy! (Fun to watch)
-
-        // THE THROW
-        startingHeight: 10, // Drop from high up
-        throwForce: 2.5,      // Moderate throw (enough to roll, not enough to hit the edge)
-        spinForce: 5       // Lots of spin
-    });
-
-    Box.init().then(() => console.log("Dice Ready"));
-} catch (e) {
-    console.error("Dice failed", e);
-}
-
-// 4. SOCKET LOGIC
 socket.on('room_joined', (data) => {
     myRoomCode = data.code;
     lobbyOverlay.classList.add('hidden');
     document.getElementById('room-info').style.display = 'block';
     roomCodeDisplay.innerText = myRoomCode;
-    msgInput.disabled = false;
-    msgInput.placeholder = "Type a message...";
-    msgInput.focus();
 });
 
-socket.on('trigger_roll', (data) => {
-    const menu = document.getElementById('dice-menu');
-    if (menu) menu.style.display = 'none';
-
-    if (Box) {
-        // 👇 FIX: Use OBJECT Syntax (More reliable than string text)
-        // This tells the physics engine: "Spawn a D20 and FORCE it to value X"
-        Box.roll([{
-            sides: data.sides,
-            value: data.result // <--- The Server's Number
-        }]).then((results) => {
-
-            // Only the roller sends the message to chat
-            if (data.rollerId === socket.id) {
-                socket.emit('roll_complete', {
-                    sides: data.sides,
-                    result: data.result, // Use the server's truth
-                    user: myUsername
-                });
-            }
-
-            setTimeout(() => Box.clear(), 4000);
-        });
-    }
-});
-
-socket.on('chat_message', (msg) => {
-    const item = document.createElement('div');
-    item.innerHTML = typeof msg === 'object' ? `<b style="color:#a47ed8">${msg.user}:</b> ${msg.text}` : msg;
-    messages.appendChild(item);
-    messages.scrollTop = messages.scrollHeight;
-});
-
-// 5. CANVAS & INPUT LOGIC
-document.getElementById('input-area').onsubmit = (e) => {
-    e.preventDefault();
-    if (msgInput.value && myRoomCode) {
-        socket.emit('chat_message', { user: myUsername, text: msgInput.value });
-        msgInput.value = '';
-    }
-};
-
-window.toggleDiceMenu = () => diceMenu.style.display = (diceMenu.style.display === 'flex') ? 'none' : 'flex';
-window.rollDice = (s) => {
-    socket.emit('roll_dice', { sides: s });
-};
-
-// --- NEW CANVAS LOGIC ---
+// 5. CANVAS & BOARD LOGIC (RESTORED)
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
-let tokens = [];
-let backgroundImage = new Image();
-let isMapLoaded = false;
-let dragOrigin = { x: 0, y: 0 }; // Where did the drag start?
+let tokens = [], isDragging = false, dragId = null, offX = 0, offY = 0, dragOrigin = { x: 0, y: 0 };
+let backgroundImage = new Image(), isMapLoaded = false;
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // 1. Draw Map
     if (isMapLoaded) ctx.drawImage(backgroundImage, 0, 0);
 
-    // 2. Draw Grid (50px squares)
+    // Grid (50px = 5ft)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
     for (let x = 0; x <= canvas.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
     for (let y = 0; y <= canvas.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
-    // 3. Draw Measurement Arrow (if dragging)
+    // Measurement Arrow
     if (isDragging && dragId) {
         const t = tokens.find(tok => tok.id === dragId);
         if (t) {
-            // Calculate distance: 50px = 5ft
             const distPx = Math.hypot(t.x - dragOrigin.x, t.y - dragOrigin.y);
             const distFt = Math.round(distPx / 50) * 5;
-
-            // Draw Line
-            ctx.beginPath();
-            ctx.moveTo(dragOrigin.x, dragOrigin.y);
-            ctx.lineTo(t.x, t.y);
-            ctx.strokeStyle = '#ffff00'; // Yellow arrow
-            ctx.lineWidth = 3;
-            ctx.stroke();
-
-            // Draw Distance Text
-            ctx.fillStyle = '#ffff00';
-            ctx.font = 'bold 16px Arial';
+            ctx.beginPath(); ctx.moveTo(dragOrigin.x, dragOrigin.y); ctx.lineTo(t.x, t.y);
+            ctx.strokeStyle = '#ffff00'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.fillStyle = '#ffff00'; ctx.font = 'bold 16px Arial';
             ctx.fillText(`${distFt} ft`, (dragOrigin.x + t.x) / 2, (dragOrigin.y + t.y) / 2 - 10);
         }
     }
 
-    // 4. Draw Tokens
+    // Tokens
     tokens.forEach(t => {
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
-        ctx.fillStyle = t.color;
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
+        ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = t.color; ctx.fill();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = 'white'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center';
         ctx.fillText(t.label, t.x, t.y + 4);
     });
 }
@@ -190,29 +140,39 @@ socket.on('init_state', (state) => {
     tokens = state.tokens;
     if (state.background) {
         backgroundImage.src = state.background;
-        backgroundImage.onload = () => { isMapLoaded = true; canvas.width = state.mapWidth; canvas.height = state.mapHeight; draw(); };
-    } else { canvas.width = 800; canvas.height = 600; draw(); }
+        backgroundImage.onload = () => { isMapLoaded = true; canvas.width = state.mapWidth; canvas.height = state.mapHeight; };
+    } else { canvas.width = 800; canvas.height = 600; }
 });
 
 socket.on('update_token', (data) => {
     const t = tokens.find(tok => tok.id === data.id);
-    if (t) { t.x = data.x; t.y = data.y; draw(); }
+    if (t) { t.x = data.x; t.y = data.y; }
 });
 
-let isDragging = false, dragId = null, offX = 0, offY = 0;
+setInterval(draw, 30);
+
+// Map Upload Logic
+document.getElementById('map-upload').onchange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+            socket.emit('update_map', { image: event.target.result, width: img.width, height: img.height });
+        };
+        img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+};
 
 canvas.onmousedown = (e) => {
     const r = canvas.getBoundingClientRect();
     const mx = (e.clientX - r.left) * (canvas.width / r.width);
     const my = (e.clientY - r.top) * (canvas.height / r.height);
-
     tokens.forEach(t => {
         if (Math.hypot(mx - t.x, my - t.y) < 20) {
-            isDragging = true;
-            dragId = t.id;
-            offX = mx - t.x;
-            offY = my - t.y;
-            dragOrigin = { x: t.x, y: t.y }; // Save start position for arrow
+            isDragging = true; dragId = t.id; offX = mx - t.x; offY = my - t.y;
+            dragOrigin = { x: t.x, y: t.y };
         }
     });
 };
@@ -222,28 +182,34 @@ canvas.onmousemove = (e) => {
         const r = canvas.getBoundingClientRect();
         const mx = (e.clientX - r.left) * (canvas.width / r.width);
         const my = (e.clientY - r.top) * (canvas.height / r.height);
-
         const t = tokens.find(tok => tok.id === dragId);
-        t.x = mx - offX;
-        t.y = my - offY;
-
-        draw();
-        // We only emit on drop to save performance
+        t.x = mx - offX; t.y = my - offY;
     }
 };
 
 canvas.onmouseup = () => {
     if (isDragging) {
         const t = tokens.find(tok => tok.id === dragId);
-
-        // SNAP TO GRID (Nearest 50px)
-        // 25 is the offset (half of 50) so it snaps to center of tile
+        // Snapping logic (nearest 50px tile center)
         t.x = Math.round((t.x - 25) / 50) * 50 + 25;
         t.y = Math.round((t.y - 25) / 50) * 50 + 25;
-
-        draw();
         socket.emit('move_token', { id: t.id, x: t.x, y: t.y });
     }
-    isDragging = false;
-    dragId = null;
+    isDragging = false; dragId = null;
+};
+
+// 6. CHAT PANEL
+socket.on('chat_message', (msg) => {
+    const item = document.createElement('div');
+    item.innerHTML = `<b style="color:#a47ed8">${msg.user}:</b> ${msg.text}`;
+    messages.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+});
+
+document.getElementById('input-area').onsubmit = (e) => {
+    e.preventDefault();
+    if (msgInput.value && myRoomCode) {
+        socket.emit('chat_message', { user: myUsername, text: msgInput.value });
+        msgInput.value = '';
+    }
 };

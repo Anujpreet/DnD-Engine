@@ -25,8 +25,6 @@ function createGameState() {
 }
 
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-
     socket.on('host_game', (username) => {
         const roomCode = generateRoomCode();
         rooms[roomCode] = createGameState();
@@ -42,8 +40,6 @@ io.on('connection', (socket) => {
             socket.emit('room_joined', { code: roomCode, isHost: false, username: data.username });
             socket.emit('init_state', rooms[roomCode]);
             io.to(roomCode).emit('chat_message', { user: 'System', text: `${data.username} joined.` });
-        } else {
-            socket.emit('error_message', 'Room not found!');
         }
     });
 
@@ -52,37 +48,35 @@ io.on('connection', (socket) => {
         if (roomCode && rooms[roomCode]) {
             const token = rooms[roomCode].tokens.find(t => t.id === data.id);
             if (token) {
-                token.x = data.x;
-                token.y = data.y;
+                token.x = data.x; token.y = data.y;
                 socket.to(roomCode).emit('update_token', data);
             }
         }
     });
 
-    // --- SYNCHRONIZED DICE LOGIC ---
-    socket.on('roll_dice', (data) => {
+    socket.on('update_map', (data) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
-        if (roomCode) {
-            // 1. Server decides the result FIRST
-            // This ensures everyone gets the same number
-            const result = Math.floor(Math.random() * data.sides) + 1;
-
-            // 2. Send the result to everyone
-            io.to(roomCode).emit('trigger_roll', {
-                sides: data.sides,
-                result: result, // <--- We send the forced result
-                rollerId: socket.id
-            });
+        if (roomCode && rooms[roomCode]) {
+            rooms[roomCode].background = data.image;
+            rooms[roomCode].mapWidth = data.width;
+            rooms[roomCode].mapHeight = data.height;
+            socket.to(roomCode).emit('init_state', rooms[roomCode]);
         }
     });
 
-    socket.on('roll_complete', (data) => {
+    socket.on('roll_dice', (data) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
         if (roomCode) {
-            // 2. NOW tell the chat the result
-            io.to(roomCode).emit('chat_message', {
-                user: data.user,
-                text: `Rolled D${data.sides}: [ ${data.result} ]`
+            // 1. Force conversion to number and pick a result ONCE
+            const sides = parseInt(data.sides);
+            const resultValue = Math.floor(Math.random() * sides) + 1;
+
+            // 2. Broadcast the EXACT result to everyone in the room
+            io.to(roomCode).emit('trigger_god_roll', {
+                sides: sides,
+                result: resultValue,
+                user: data.username,
+                color: data.color || "#5a2e91"
             });
         }
     });
@@ -94,4 +88,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+http.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
