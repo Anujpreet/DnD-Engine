@@ -55,12 +55,14 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('roll_dice', (data) => {
+    socket.on('roll_complete', (data) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
         if (roomCode) {
-            const result = Math.floor(Math.random() * data.sides) + 1;
-            io.to(roomCode).emit('dice_result', { result: result, sides: data.sides });
-            io.to(roomCode).emit('chat_message', { user: 'System', text: `Rolled D${data.sides}: [ ${result} ]` });
+            // NOW we tell the chat the result
+            io.to(roomCode).emit('chat_message', {
+                user: data.user,
+                text: `Rolled D${data.sides}: [ ${data.result} ]`
+            });
         }
     });
 

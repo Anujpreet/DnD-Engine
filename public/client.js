@@ -61,10 +61,32 @@ socket.on('room_joined', (data) => {
     msgInput.focus();
 });
 
-socket.on('dice_result', (data) => {
+socket.on('trigger_roll', (data) => {
+    // Hide the menu instantly so it doesn't block the view
+    const menu = document.getElementById('dice-menu');
+    if (menu) menu.style.display = 'none';
+
     if (Box) {
-        Box.roll(`d${data.sides}`, { result: data.result, clear: true });
-        setTimeout(() => Box.clear(), 5000);
+        // Start the 3D animation for everyone
+        Box.roll(`${data.sides}d${data.sides}`).then((results) => {
+            // "results" contains the number the physics engine landed on
+
+            // ONLY the person who clicked send the result to the server
+            // (Otherwise everyone sends it and you get duplicate chat messages)
+            if (data.rollerId === socket.id) {
+                // Calculate the total (if rolling multiple dice, sum them up)
+                let total = results.reduce((acc, r) => acc + r.value, 0);
+
+                socket.emit('roll_complete', {
+                    sides: data.sides,
+                    result: total,
+                    user: myUsername
+                });
+            }
+
+            // Clear the dice after 4 seconds
+            setTimeout(() => Box.clear(), 4000);
+        });
     }
 });
 
@@ -85,7 +107,9 @@ document.getElementById('input-area').onsubmit = (e) => {
 };
 
 window.toggleDiceMenu = () => diceMenu.style.display = (diceMenu.style.display === 'flex') ? 'none' : 'flex';
-window.rollDice = (s) => { socket.emit('roll_dice', { sides: s }); diceMenu.style.display = 'none'; };
+window.rollDice = (s) => {
+    socket.emit('roll_dice', { sides: s });
+};
 
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
