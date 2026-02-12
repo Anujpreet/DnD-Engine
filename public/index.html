@@ -209,13 +209,19 @@
 
         #dice-stage {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            /* 1. Center a smaller box on the screen */
+            top: 20%;
+            left: 20%;
+            width: 60%;
+            height: 60%;
+
+            /* 2. Zoom it in to make dice look HUGE */
+            transform: scale(1.8);
+
             pointer-events: none;
             z-index: 9999;
-
+            /* Optional: Add a border to see the roll area for debugging */
+            /* border: 1px solid red; */
         }
     </style>
 </head>
