@@ -38,7 +38,7 @@ document.getElementById('btn-confirm-join').onclick = () => {
     } else { alert("Enter 4-letter code"); }
 };
 
-// 3. 3D DICE ENGINE (VISIBILITY FIX)
+// 3. 3D DICE ENGINE (FINAL CENTERED FIX)
 let Box;
 try {
     Box = new DiceBox({
@@ -47,22 +47,26 @@ try {
         origin: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/",
         assetPath: "assets/",
 
-        // VISIBILITY SETTINGS
-        scale: 9,           // Max safe size for physics
-        throwForce: 20,      // ✅ INCREASED: Throws them into the center of the screen
-        spinForce: 4,       // More spin looks better large
-        startingHeight: 15, // Drop from higher up
-        gravity: 1,
-
+        // VISUALS
+        scale: 12,          // Large & Sharp (because box is 1000px)
+        themeColor: "#5a2e91",
         theme: "default",
-        themeColor: "#5a2e91"
+
+        // PHYSICS
+        mass: 3,            // Heavier dice
+        gravity: 3,         // Pulls them down fast
+        friction: 0.8,      // Stops them sliding forever
+
+        // THROWING (Tuned for 1000px box)
+        startingHeight: 15,
+        throwForce: 6,      // ✅ Stronger throw to hit the center of the big box
+        spinForce: 8
     });
 
     Box.init().then(() => console.log("Dice Ready"));
 } catch (e) {
     console.error("Dice failed", e);
 }
-
 
 // 4. SOCKET LOGIC
 socket.on('room_joined', (data) => {
