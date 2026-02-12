@@ -41,7 +41,7 @@ let Box;
 try {
     Box = new DiceBox("#dice-stage", {
         id: "dice-canvas",
-        assetPath: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/assets/",
+        assetPath: "/assets/dice-box/",
         startingHeight: 8,
         throwForce: 6,
         spinForce: 5,
