@@ -59,13 +59,18 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NEW DICE LOGIC ---
+    // --- SYNCHRONIZED DICE LOGIC ---
     socket.on('roll_dice', (data) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
         if (roomCode) {
-            // 1. Tell everyone to start the animation
+            // 1. Server decides the result FIRST
+            // This ensures everyone gets the same number
+            const result = Math.floor(Math.random() * data.sides) + 1;
+
+            // 2. Send the result to everyone
             io.to(roomCode).emit('trigger_roll', {
                 sides: data.sides,
+                result: result, // <--- We send the forced result
                 rollerId: socket.id
             });
         }

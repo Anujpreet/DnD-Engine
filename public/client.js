@@ -38,7 +38,7 @@ document.getElementById('btn-confirm-join').onclick = () => {
     } else { alert("Enter 4-letter code"); }
 };
 
-// 3. 3D DICE ENGINE (FINAL CENTERED FIX)
+// 3. 3D DICE ENGINE (INFINITE FLOOR MODE)
 let Box;
 try {
     Box = new DiceBox({
@@ -48,19 +48,19 @@ try {
         assetPath: "assets/",
 
         // VISUALS
-        scale: 6,          // Large & Sharp (because box is 1000px)
+        scale: 4,           // Standard size
         themeColor: "#5a2e91",
         theme: "default",
 
         // PHYSICS
-        mass: 3,            // Heavier dice
-        gravity: 3,         // Pulls them down fast
-        friction: 0.8,      // Stops them sliding forever
+        mass: 5,            // Solid weight
+        friction: 0.9,      // 🛑 High Friction: Stops the die before it hits the edge
+        restitution: 0.2,   // ✅ Bouncy! (Fun to watch)
 
-        // THROWING (Tuned for 1000px box)
-        startingHeight: 15,
-        throwForce: 6,      // ✅ Stronger throw to hit the center of the big box
-        spinForce: 8
+        // THE THROW
+        startingHeight: 10, // Drop from high up
+        throwForce: 2.5,      // Moderate throw (enough to roll, not enough to hit the edge)
+        spinForce: 5       // Lots of spin
     });
 
     Box.init().then(() => console.log("Dice Ready"));
@@ -84,21 +84,22 @@ socket.on('trigger_roll', (data) => {
     if (menu) menu.style.display = 'none';
 
     if (Box) {
-        // 👇 FIX: Use '1d' instead of data.sides + 'd'
-        // This ensures we only roll ONE die of the specified type
-        Box.roll(`1d${data.sides}`).then((results) => {
+        // 👇 FIX: Use OBJECT Syntax (More reliable than string text)
+        // This tells the physics engine: "Spawn a D20 and FORCE it to value X"
+        Box.roll([{
+            sides: data.sides,
+            value: data.result // <--- The Server's Number
+        }]).then((results) => {
 
-            // Only the person who clicked sends the result to chat
+            // Only the roller sends the message to chat
             if (data.rollerId === socket.id) {
-                let total = results.reduce((acc, r) => acc + r.value, 0);
                 socket.emit('roll_complete', {
                     sides: data.sides,
-                    result: total,
+                    result: data.result, // Use the server's truth
                     user: myUsername
                 });
             }
 
-            // Clear dice after 4 seconds
             setTimeout(() => Box.clear(), 4000);
         });
     }
