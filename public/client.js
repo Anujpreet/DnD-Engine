@@ -1,3 +1,5 @@
+import DiceBox from "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/dice-box.es.min.js";
+
 const socket = io();
 
 // 1. DOM ELEMENTS
@@ -41,7 +43,7 @@ let Box;
 try {
     Box = new DiceBox("#dice-stage", {
         id: "dice-canvas",
-        assetPath: "/assets/dice-box/", // Points to your local files
+        assetPath: "https://unpkg.com/@3d-dice/dice-box@1.1.3/dist/assets/",
         startingHeight: 8,
         throwForce: 6,
         spinForce: 5,
@@ -49,7 +51,9 @@ try {
         scale: 5
     });
     Box.init().then(() => console.log("Dice Ready"));
-} catch (e) { console.error("Dice failed", e); }
+} catch (e) {
+    console.error("Dice failed", e);
+}
 
 // 4. SOCKET LOGIC
 socket.on('room_joined', (data) => {
