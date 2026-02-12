@@ -12,7 +12,7 @@ const messages = document.getElementById('messages');
 let myUsername = "Player";
 let myRoomCode = null;
 
-// 2. LOBBY LISTENERS (TOP LEVEL FOR SAFETY)
+// 2. LOBBY LISTENERS
 document.getElementById('btn-host-game').onclick = () => {
     myUsername = document.getElementById('username-input').value || "Host";
     socket.emit('host_game', myUsername);
@@ -36,19 +36,20 @@ document.getElementById('btn-confirm-join').onclick = () => {
     } else { alert("Enter 4-letter code"); }
 };
 
-// 3. 3D DICE ENGINE INITIALIZATION
+// 3. 3D DICE ENGINE
 let Box;
 try {
     Box = new DiceBox("#dice-stage", {
         id: "dice-canvas",
-        assetPath: "/assets/dice-box/",
+        assetPath: "/assets/dice-box/", // Points to your local files
         startingHeight: 8,
         throwForce: 6,
         spinForce: 5,
         themeColor: "#5a2e91",
+        scale: 5
     });
     Box.init().then(() => console.log("Dice Ready"));
-} catch (e) { console.error("Dice failed, but game will work.", e); }
+} catch (e) { console.error("Dice failed", e); }
 
 // 4. SOCKET LOGIC
 socket.on('room_joined', (data) => {
@@ -62,29 +63,19 @@ socket.on('room_joined', (data) => {
 });
 
 socket.on('trigger_roll', (data) => {
-    // Hide the menu instantly so it doesn't block the view
     const menu = document.getElementById('dice-menu');
     if (menu) menu.style.display = 'none';
 
     if (Box) {
-        // Start the 3D animation for everyone
         Box.roll(`${data.sides}d${data.sides}`).then((results) => {
-            // "results" contains the number the physics engine landed on
-
-            // ONLY the person who clicked send the result to the server
-            // (Otherwise everyone sends it and you get duplicate chat messages)
             if (data.rollerId === socket.id) {
-                // Calculate the total (if rolling multiple dice, sum them up)
                 let total = results.reduce((acc, r) => acc + r.value, 0);
-
                 socket.emit('roll_complete', {
                     sides: data.sides,
                     result: total,
                     user: myUsername
                 });
             }
-
-            // Clear the dice after 4 seconds
             setTimeout(() => Box.clear(), 4000);
         });
     }
@@ -111,22 +102,63 @@ window.rollDice = (s) => {
     socket.emit('roll_dice', { sides: s });
 };
 
+// --- NEW CANVAS LOGIC ---
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 let tokens = [];
 let backgroundImage = new Image();
 let isMapLoaded = false;
+let dragOrigin = { x: 0, y: 0 }; // Where did the drag start?
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. Draw Map
     if (isMapLoaded) ctx.drawImage(backgroundImage, 0, 0);
+
+    // 2. Draw Grid (50px squares)
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
     for (let x = 0; x <= canvas.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
     for (let y = 0; y <= canvas.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+    // 3. Draw Measurement Arrow (if dragging)
+    if (isDragging && dragId) {
+        const t = tokens.find(tok => tok.id === dragId);
+        if (t) {
+            // Calculate distance: 50px = 5ft
+            const distPx = Math.hypot(t.x - dragOrigin.x, t.y - dragOrigin.y);
+            const distFt = Math.round(distPx / 50) * 5;
+
+            // Draw Line
+            ctx.beginPath();
+            ctx.moveTo(dragOrigin.x, dragOrigin.y);
+            ctx.lineTo(t.x, t.y);
+            ctx.strokeStyle = '#ffff00'; // Yellow arrow
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Draw Distance Text
+            ctx.fillStyle = '#ffff00';
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText(`${distFt} ft`, (dragOrigin.x + t.x) / 2, (dragOrigin.y + t.y) / 2 - 10);
+        }
+    }
+
+    // 4. Draw Tokens
     tokens.forEach(t => {
-        ctx.beginPath(); ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
-        ctx.fillStyle = t.color; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.stroke();
-        ctx.fillStyle = 'white'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.fillText(t.label, t.x, t.y + 4);
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = t.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(t.label, t.x, t.y + 4);
     });
 }
 
@@ -143,20 +175,51 @@ socket.on('update_token', (data) => {
     if (t) { t.x = data.x; t.y = data.y; draw(); }
 });
 
-// Token movement logic - Unchanged
 let isDragging = false, dragId = null, offX = 0, offY = 0;
+
 canvas.onmousedown = (e) => {
     const r = canvas.getBoundingClientRect();
-    const mx = (e.clientX - r.left) * (canvas.width / r.width), my = (e.clientY - r.top) * (canvas.height / r.height);
-    tokens.forEach(t => { if (Math.hypot(mx - t.x, my - t.y) < 20) { isDragging = true; dragId = t.id; offX = mx - t.x; offY = my - t.y; } });
+    const mx = (e.clientX - r.left) * (canvas.width / r.width);
+    const my = (e.clientY - r.top) * (canvas.height / r.height);
+
+    tokens.forEach(t => {
+        if (Math.hypot(mx - t.x, my - t.y) < 20) {
+            isDragging = true;
+            dragId = t.id;
+            offX = mx - t.x;
+            offY = my - t.y;
+            dragOrigin = { x: t.x, y: t.y }; // Save start position for arrow
+        }
+    });
 };
+
 canvas.onmousemove = (e) => {
     if (isDragging) {
         const r = canvas.getBoundingClientRect();
-        const mx = (e.clientX - r.left) * (canvas.width / r.width), my = (e.clientY - r.top) * (canvas.height / r.height);
+        const mx = (e.clientX - r.left) * (canvas.width / r.width);
+        const my = (e.clientY - r.top) * (canvas.height / r.height);
+
         const t = tokens.find(tok => tok.id === dragId);
-        t.x = mx - offX; t.y = my - offY;
-        draw(); socket.emit('move_token', { id: t.id, x: t.x, y: t.y });
+        t.x = mx - offX;
+        t.y = my - offY;
+
+        draw();
+        // We only emit on drop to save performance
     }
 };
-canvas.onmouseup = () => isDragging = false;
+
+canvas.onmouseup = () => {
+    if (isDragging) {
+        const t = tokens.find(tok => tok.id === dragId);
+
+        // SNAP TO GRID (Nearest 50px)
+        // 25 is the offset (half of 50) so it snaps to center of tile
+        t.x = Math.round((t.x - 25) / 50) * 50 + 25;
+        t.y = Math.round((t.y - 25) / 50) * 50 + 25;
+
+        draw();
+        socket.emit('move_token', { id: t.id, x: t.x, y: t.y });
+    }
+    isDragging = false;
+    dragId = null;
+};

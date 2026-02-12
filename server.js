@@ -5,7 +5,7 @@ const io = require('socket.io')(http);
 
 app.use(express.static('public'));
 
-const rooms = {}; // Room storage
+const rooms = {};
 
 function generateRoomCode() {
     let result = '';
@@ -51,14 +51,30 @@ io.on('connection', (socket) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
         if (roomCode && rooms[roomCode]) {
             const token = rooms[roomCode].tokens.find(t => t.id === data.id);
-            if (token) { token.x = data.x; token.y = data.y; socket.to(roomCode).emit('update_token', data); }
+            if (token) {
+                token.x = data.x;
+                token.y = data.y;
+                socket.to(roomCode).emit('update_token', data);
+            }
+        }
+    });
+
+    // --- NEW DICE LOGIC ---
+    socket.on('roll_dice', (data) => {
+        const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
+        if (roomCode) {
+            // 1. Tell everyone to start the animation
+            io.to(roomCode).emit('trigger_roll', {
+                sides: data.sides,
+                rollerId: socket.id
+            });
         }
     });
 
     socket.on('roll_complete', (data) => {
         const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
         if (roomCode) {
-            // NOW we tell the chat the result
+            // 2. NOW tell the chat the result
             io.to(roomCode).emit('chat_message', {
                 user: data.user,
                 text: `Rolled D${data.sides}: [ ${data.result} ]`
