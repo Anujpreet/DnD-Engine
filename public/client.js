@@ -48,7 +48,7 @@ try {
         assetPath: "assets/",
 
         // VISUALS
-        scale: 12,          // Large & Sharp (because box is 1000px)
+        scale: 6,          // Large & Sharp (because box is 1000px)
         themeColor: "#5a2e91",
         theme: "default",
 
